@@ -8,6 +8,16 @@ const REQUEST_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
 };
 
+function getYouTubeRequestOptions() {
+  const headers = { ...REQUEST_HEADERS };
+  const cookie = String(process.env.YOUTUBE_COOKIE || '').trim();
+  if (cookie) {
+    headers.Cookie = cookie;
+  }
+
+  return { headers };
+}
+
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
@@ -245,7 +255,7 @@ async function handleYouTubeExtract(res, reqUrl) {
   }
 
   try {
-    const info = await ytdl.getInfo(target, { requestOptions: { headers: REQUEST_HEADERS } });
+    const info = await ytdl.getInfo(target, { requestOptions: getYouTubeRequestOptions() });
     const payload = buildYouTubeOptions(info);
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json');
@@ -282,7 +292,7 @@ async function handleYouTubeDownload(req, res, reqUrl) {
   }
 
   try {
-    const info = await ytdl.getInfo(target, { requestOptions: { headers: REQUEST_HEADERS } });
+    const info = await ytdl.getInfo(target, { requestOptions: getYouTubeRequestOptions() });
     const candidates = info.formats.filter((item) => {
       const container = String(item?.container || '').toLowerCase();
       return container === 'mp4' && item?.hasVideo && item?.hasAudio;
@@ -312,7 +322,7 @@ async function handleYouTubeDownload(req, res, reqUrl) {
 
     const stream = ytdl.downloadFromInfo(info, {
       quality: String(chosen.itag),
-      requestOptions: { headers: REQUEST_HEADERS },
+      requestOptions: getYouTubeRequestOptions(),
     });
 
     stream.on('error', (error) => {

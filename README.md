@@ -18,6 +18,11 @@ Current limitation:
 - MP4 direct formats are supported.
 - MP3 conversion is not supported in this Vercel-native mode.
 
+Optional for bot-check errors:
+
+- Add Vercel environment variable `YOUTUBE_COOKIE` with your YouTube browser cookie header value.
+- Redeploy after setting it.
+
 YouTube routes:
 
 - `/youtube/extract`
