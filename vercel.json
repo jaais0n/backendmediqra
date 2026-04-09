@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/health", "destination": "/api/health" },
+    { "source": "/extract", "destination": "/api/extract" },
+    { "source": "/download", "destination": "/api/download" },
+    { "source": "/proxy", "destination": "/api/proxy" },
+    { "source": "/youtube/extract", "destination": "/api/youtube/extract" },
+    { "source": "/youtube/download", "destination": "/api/youtube/download" }
+  ]
+}

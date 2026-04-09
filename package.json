@@ -1,0 +1,12 @@
+{
+  "name": "mediqra-vercel-backend",
+  "private": true,
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
+    "instagram-url-direct": "^2.0.7"
+  }
+}
