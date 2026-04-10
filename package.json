@@ -7,7 +7,6 @@
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
-    "instagram-url-direct": "^2.0.7",
-    "yt-dlp-exec": "^1.0.2"
+    "instagram-url-direct": "^2.0.7"
   }
 }

@@ -1,7 +1,6 @@
 const { instagramGetUrl } = require('instagram-url-direct');
 const { Readable } = require('node:stream');
 const ytdl = require('@distube/ytdl-core');
-const ytDlp = require('yt-dlp-exec');
 
 const REQUEST_HEADERS = {
   Accept: '*/*',
@@ -62,7 +61,6 @@ async function getYouTubeInfoWithRetry(target) {
 
   let lastError = null;
   let innertubeError = null;
-  let ytDlpError = null;
   for (const options of attempts) {
     try {
       return await ytdl.getInfo(target, options);
@@ -80,76 +78,10 @@ async function getYouTubeInfoWithRetry(target) {
     console.log('[YouTube] Innertube fallback failed:', error.message);
   }
 
-  // Fallback: yt-dlp handles many anti-bot edge cases without manual cookie copy.
-  try {
-    console.log('[YouTube] Innertube failed, trying yt-dlp fallback...');
-    return await getYouTubeInfoViaYtDlp(target);
-  } catch (error) {
-    ytDlpError = error;
-    console.log('[YouTube] yt-dlp fallback failed:', error.message);
-  }
-
-  if (ytDlpError) {
-    throw ytDlpError;
-  }
   if (innertubeError) {
     throw innertubeError;
   }
   throw lastError || new Error('No playable formats found');
-}
-
-async function getYouTubeInfoViaYtDlp(videoUrl) {
-  const videoId = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/)?.[1] || '';
-
-  const raw = await ytDlp(videoUrl, {
-    dumpSingleJson: true,
-    skipDownload: true,
-    noWarnings: true,
-    noCheckCertificates: true,
-    geoBypass: true,
-    preferFreeFormats: true,
-  });
-
-  const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
-
-  const formats = Array.isArray(data?.formats) ? data.formats : [];
-  const normalizedFormats = formats
-    .filter((format) => {
-      const ext = String(format?.ext || '').toLowerCase();
-      const hasVideo = String(format?.vcodec || 'none') !== 'none';
-      const hasAudio = String(format?.acodec || 'none') !== 'none';
-      return ext === 'mp4' && hasVideo && hasAudio && Boolean(format?.url);
-    })
-    .map((format) => ({
-      itag: String(format?.format_id || ''),
-      url: String(format?.url || ''),
-      mimeType: 'video/mp4',
-      bitrate: Number(format?.tbr || 0) || 0,
-      width: Number(format?.width || 0) || null,
-      height: Number(format?.height || 0) || null,
-      fps: Number(format?.fps || 0) || null,
-      qualityLabel: format?.height ? `${format.height}p` : String(format?.format_note || ''),
-      container: 'mp4',
-      hasVideo: true,
-      hasAudio: true,
-      contentLength: Number(format?.filesize || 0) || null,
-    }))
-    .filter((format) => format.itag && format.url);
-
-  if (normalizedFormats.length === 0) {
-    throw new Error('yt-dlp did not return playable MP4 formats');
-  }
-
-  return {
-    videoDetails: {
-      videoId,
-      title: String(data?.title || 'youtube_video'),
-      lengthSeconds: String(data?.duration || ''),
-      author: String(data?.uploader || data?.channel || ''),
-      thumbnails: Array.isArray(data?.thumbnails) ? data.thumbnails : [],
-    },
-    formats: normalizedFormats,
-  };
 }
 
 async function getYouTubeInfoViaInnertube(videoUrl) {
