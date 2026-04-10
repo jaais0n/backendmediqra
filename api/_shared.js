@@ -61,6 +61,8 @@ async function getYouTubeInfoWithRetry(target) {
   ];
 
   let lastError = null;
+  let innertubeError = null;
+  let ytDlpError = null;
   for (const options of attempts) {
     try {
       return await ytdl.getInfo(target, options);
@@ -73,18 +75,26 @@ async function getYouTubeInfoWithRetry(target) {
   try {
     console.log('[YouTube] ytdl-core failed, trying Innertube fallback...');
     return await getYouTubeInfoViaInnertube(target);
-  } catch (interttubeError) {
-    console.log('[YouTube] Innertube fallback failed:', interttubeError.message);
+  } catch (error) {
+    innertubeError = error;
+    console.log('[YouTube] Innertube fallback failed:', error.message);
   }
 
   // Fallback: yt-dlp handles many anti-bot edge cases without manual cookie copy.
   try {
     console.log('[YouTube] Innertube failed, trying yt-dlp fallback...');
     return await getYouTubeInfoViaYtDlp(target);
-  } catch (ytDlpError) {
-    console.log('[YouTube] yt-dlp fallback failed:', ytDlpError.message);
+  } catch (error) {
+    ytDlpError = error;
+    console.log('[YouTube] yt-dlp fallback failed:', error.message);
   }
 
+  if (ytDlpError) {
+    throw ytDlpError;
+  }
+  if (innertubeError) {
+    throw innertubeError;
+  }
   throw lastError || new Error('No playable formats found');
 }
 
