@@ -14,10 +14,10 @@ module.exports = async function health(req, res) {
   res.end(JSON.stringify({
     ok: true,
     provider: 'vercel',
-    build: '2026-04-10-innertube-multiclient-1',
+    build: '2026-04-10-youtube-hardening-2',
     instagram: true,
     youtube: true,
-    youtubeMode: 'native-limited',
+    youtubeMode: 'native-limited+piped-fallback',
     youtubeMp3Conversion: false,
     youtubeCookieConfigured: Boolean(String(process.env.YOUTUBE_COOKIE || '').trim()),
   }));
