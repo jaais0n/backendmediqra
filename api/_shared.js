@@ -133,6 +133,7 @@ function convertInnertubeToyDLFormat(innertube, videoId) {
     if (format.url) {
       formats.push({
         itag: format.itag,
+        url: format.url,
         mimeType: format.mimeType,
         bitrate: format.bitrate,
         width: format.width,
@@ -156,6 +157,7 @@ function convertInnertubeToyDLFormat(innertube, videoId) {
 
       formats.push({
         itag: format.itag,
+        url: format.url,
         mimeType,
         bitrate: format.bitrate,
         width: format.width,
@@ -163,6 +165,12 @@ function convertInnertubeToyDLFormat(innertube, videoId) {
         fps: format.fps,
         qualityLabel: format.qualityLabel || (format.height ? `${format.height}p` : 'audio'),
         container: mimeType.split('/')[1]?.split(';')[0] || 'unknown',
+        hasVideo: isVideo,
+        hasAudio: isAudio,
+        contentLength: format.contentLength || 0,
+      });
+    }
+  }
         hasVideo: isVideo,
         hasAudio: isAudio,
         contentLength: format.contentLength || 0,
