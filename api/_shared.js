@@ -91,7 +91,7 @@ async function getYouTubeInfoWithRetry(target) {
 async function getYouTubeInfoViaYtDlp(videoUrl) {
   const videoId = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/)?.[1] || '';
 
-  const data = await ytDlp(videoUrl, {
+  const raw = await ytDlp(videoUrl, {
     dumpSingleJson: true,
     skipDownload: true,
     noWarnings: true,
@@ -99,6 +99,8 @@ async function getYouTubeInfoViaYtDlp(videoUrl) {
     geoBypass: true,
     preferFreeFormats: true,
   });
+
+  const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
 
   const formats = Array.isArray(data?.formats) ? data.formats : [];
   const normalizedFormats = formats
