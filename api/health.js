@@ -14,9 +14,11 @@ module.exports = async function health(req, res) {
   res.end(JSON.stringify({
     ok: true,
     provider: 'vercel',
+    build: '2026-04-10-ytretry-1',
     instagram: true,
     youtube: true,
     youtubeMode: 'native-limited',
     youtubeMp3Conversion: false,
+    youtubeCookieConfigured: Boolean(String(process.env.YOUTUBE_COOKIE || '').trim()),
   }));
 };
