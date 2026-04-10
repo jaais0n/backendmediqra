@@ -8,6 +8,18 @@ const REQUEST_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
 };
 
+const INNERTUBE_API_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+const INNERTUBE_CLIENTS = [
+  { key: 'web', clientName: 'WEB', clientVersion: '2.20250305.01.00' },
+  { key: 'tv', clientName: 'TVHTML5', clientVersion: '7.20250305.01.00' },
+  {
+    key: 'web_embedded',
+    clientName: 'WEB_EMBEDDED_PLAYER',
+    clientVersion: '1.20260115.01.00',
+    thirdParty: { embedUrl: 'https://www.youtube.com/' },
+  },
+];
+
 function normalizeCookieEnvValue(rawValue) {
   const raw = String(rawValue || '').trim();
   if (!raw) {
@@ -32,6 +44,9 @@ function getYouTubeFriendlyError(message, fallback = 'YouTube request failed') {
   const lowered = raw.toLowerCase();
   if (lowered.includes('innertube api returned 400')) {
     return 'YouTube temporarily rejected this request. Please try another video or retry in a moment.';
+  }
+  if (lowered.includes('innertube unavailable')) {
+    return 'YouTube temporarily blocked this request. Try another video or retry in a few minutes.';
   }
   if (lowered.includes('sign in to confirm') || lowered.includes('not a bot')) {
     return 'YouTube temporarily blocked this request. Please try again shortly.';
@@ -93,43 +108,61 @@ async function getYouTubeInfoViaInnertube(videoUrl) {
     throw new Error('Could not extract video ID');
   }
 
-  const innertube_url = 'https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
-  const body = {
-    videoId,
-    context: {
-      client: {
-        clientName: 'WEB',
-        clientVersion: '2.20250305.01.00',
+  let lastReason = 'Video not available';
+  let lastHttpStatus = null;
+
+  for (const client of INNERTUBE_CLIENTS) {
+    const innertubeUrl = `https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}`;
+    const body = {
+      videoId,
+      playbackContext: {
+        contentPlaybackContext: {
+          html5Preference: 'HTML5_PREF_WANTS',
+        },
       },
-    },
-    contentCheckOk: true,
-    racyCheckOk: true,
-  };
+      contentCheckOk: true,
+      racyCheckOk: true,
+      context: {
+        client: {
+          hl: 'en',
+          timeZone: 'UTC',
+          utcOffsetMinutes: 0,
+          clientName: client.clientName,
+          clientVersion: client.clientVersion,
+        },
+        ...(client.thirdParty ? { thirdParty: client.thirdParty } : {}),
+      },
+    };
 
-  const response = await fetch(innertube_url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Origin': 'https://www.youtube.com',
-      'Referer': 'https://www.youtube.com/',
-      'User-Agent': REQUEST_HEADERS['User-Agent'],
-    },
-    body: JSON.stringify(body),
-  });
+    const response = await fetch(innertubeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Origin': 'https://www.youtube.com',
+        'Referer': 'https://www.youtube.com/',
+        'User-Agent': REQUEST_HEADERS['User-Agent'],
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    throw new Error(`Innertube API returned ${response.status}`);
+    if (!response.ok) {
+      lastHttpStatus = response.status;
+      continue;
+    }
+
+    const data = await response.json();
+    if (data.playabilityStatus?.status === 'OK') {
+      return convertInnertubeToyDLFormat(data, videoId);
+    }
+
+    lastReason = data.playabilityStatus?.reason || data.playabilityStatus?.status || lastReason;
   }
 
-  const data = await response.json();
-  if (data.playabilityStatus?.status !== 'OK') {
-    const reason = data.playabilityStatus?.reason || data.playabilityStatus?.status || 'Video not available';
-    throw new Error(`Innertube unavailable: ${reason}`);
+  if (lastHttpStatus) {
+    throw new Error(`Innertube API returned ${lastHttpStatus}`);
   }
-
-  // Convert Innertube response to ytdl-core format
-  return convertInnertubeToyDLFormat(data, videoId);
+  throw new Error(`Innertube unavailable: ${lastReason}`);
 }
 
 function convertInnertubeToyDLFormat(innertube, videoId) {
