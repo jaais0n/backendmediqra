@@ -68,7 +68,122 @@ async function getYouTubeInfoWithRetry(target) {
     }
   }
 
+  // Fallback: Try YouTube's official Innertube API (no cookies needed)
+  try {
+    console.log('[YouTube] ytdl-core failed, trying Innertube fallback...');
+    return await getYouTubeInfoViaInnertube(target);
+  } catch (interttubeError) {
+    console.log('[YouTube] Innertube fallback failed:', interttubeError.message);
+  }
+
   throw lastError || new Error('No playable formats found');
+}
+
+async function getYouTubeInfoViaInnertube(videoUrl) {
+  const videoId = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/)?.[1];
+  if (!videoId) {
+    throw new Error('Could not extract video ID');
+  }
+
+  const innertube_url = 'https://www.youtube.com/youtubei/v1/player';
+  const body = {
+    videoId,
+    context: {
+      client: {
+        clientName: 'IOS',
+        clientVersion: '18.49.0',
+      },
+    },
+  };
+
+  const response = await fetch(innertube_url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Innertube API returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data.playabilityStatus?.status !== 'OK') {
+    throw new Error('Video not available via Innertube');
+  }
+
+  // Convert Innertube response to ytdl-core format
+  return convertInnertubeToyDLFormat(data, videoId);
+}
+
+function convertInnertubeToyDLFormat(innertube, videoId) {
+  const { videoDetails, streamingData } = innertube;
+  if (!videoDetails) {
+    throw new Error('No video details in Innertube response');
+  }
+
+  const formats = [];
+  const videoFormats = streamingData?.formats || [];
+  const adaptiveFormats = streamingData?.adaptiveFormats || [];
+
+  // Process video formats (mp4 with audio+video)
+  for (const format of videoFormats) {
+    if (format.url) {
+      formats.push({
+        itag: format.itag,
+        mimeType: format.mimeType,
+        bitrate: format.bitrate,
+        width: format.width,
+        height: format.height,
+        fps: format.fps,
+        qualityLabel: format.qualityLabel || `${format.height}p`,
+        container: 'mp4',
+        hasVideo: true,
+        hasAudio: true,
+        contentLength: format.contentLength || 0,
+      });
+    }
+  }
+
+  // Process adaptive formats (video only or audio only)
+  for (const format of adaptiveFormats) {
+    if (format.url) {
+      const mimeType = format.mimeType || '';
+      const isVideo = mimeType.includes('video/');
+      const isAudio = mimeType.includes('audio/');
+
+      formats.push({
+        itag: format.itag,
+        mimeType,
+        bitrate: format.bitrate,
+        width: format.width,
+        height: format.height,
+        fps: format.fps,
+        qualityLabel: format.qualityLabel || (format.height ? `${format.height}p` : 'audio'),
+        container: mimeType.split('/')[1]?.split(';')[0] || 'unknown',
+        hasVideo: isVideo,
+        hasAudio: isAudio,
+        contentLength: format.contentLength || 0,
+      });
+    }
+  }
+
+  if (formats.length === 0) {
+    throw new Error('No downloadable formats found');
+  }
+
+  return {
+    videoDetails: {
+      videoId,
+      title: videoDetails.title,
+      lengthSeconds: videoDetails.lengthSeconds,
+      author: videoDetails.author,
+      thumbnails: videoDetails.thumbnail?.thumbnails || [],
+    },
+    formats,
+  };
 }
 
 function setCors(res) {
@@ -374,22 +489,50 @@ async function handleYouTubeDownload(req, res, reqUrl) {
     res.setHeader('content-disposition', `attachment; filename="${title}.mp4"`);
     res.setHeader('cache-control', 'no-store');
 
-    const stream = ytdl.downloadFromInfo(info, {
-      quality: String(chosen.itag),
-      requestOptions: getYouTubeRequestOptions(),
-    });
+    // Check if this is an Innertube response (has direct URLs) or ytdl response
+    if (chosen.url) {
+      // Innertube format: stream directly from the format URL
+      const formatStream = await fetch(chosen.url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+        },
+      });
 
-    stream.on('error', (error) => {
-      if (!res.headersSent) {
+      if (!formatStream.ok) {
         res.statusCode = 502;
         res.setHeader('content-type', 'application/json');
-        res.end(JSON.stringify({ error: `YouTube stream failed: ${error?.message || 'unknown error'}` }));
-      } else {
-        res.end();
+        res.end(JSON.stringify({ error: `Failed to fetch video stream: ${formatStream.statusText}` }));
+        return;
       }
-    });
 
-    stream.pipe(res);
+      formatStream.body.on('error', (error) => {
+        if (!res.headersSent) {
+          res.statusCode = 502;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ error: `Stream download failed: ${error?.message || 'unknown error'}` }));
+        }
+      });
+
+      formatStream.body.pipe(res);
+    } else {
+      // ytdl-core format: use downloadFromInfo
+      const stream = ytdl.downloadFromInfo(info, {
+        quality: String(chosen.itag),
+        requestOptions: getYouTubeRequestOptions(),
+      });
+
+      stream.on('error', (error) => {
+        if (!res.headersSent) {
+          res.statusCode = 502;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ error: `YouTube stream failed: ${error?.message || 'unknown error'}` }));
+        } else {
+          res.end();
+        }
+      });
+
+      stream.pipe(res);
+    }
   } catch (error) {
     const message = getYouTubeFriendlyError(error?.message, 'YouTube download failed');
     res.statusCode = /bot-check blocked/i.test(message) ? 503 : 500;
