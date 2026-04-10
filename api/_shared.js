@@ -171,12 +171,6 @@ function convertInnertubeToyDLFormat(innertube, videoId) {
       });
     }
   }
-        hasVideo: isVideo,
-        hasAudio: isAudio,
-        contentLength: format.contentLength || 0,
-      });
-    }
-  }
 
   if (formats.length === 0) {
     throw new Error('No downloadable formats found');
