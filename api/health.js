@@ -14,7 +14,7 @@ module.exports = async function health(req, res) {
   res.end(JSON.stringify({
     ok: true,
     provider: 'vercel',
-    build: '2026-04-10-js-only-fallback-1',
+    build: '2026-04-10-innertube-keyfix-1',
     instagram: true,
     youtube: true,
     youtubeMode: 'native-limited',

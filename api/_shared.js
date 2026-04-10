@@ -30,6 +30,9 @@ function getYouTubeFriendlyError(message, fallback = 'YouTube request failed') {
   }
 
   const lowered = raw.toLowerCase();
+  if (lowered.includes('innertube api returned 400')) {
+    return 'YouTube temporarily rejected this request. Please try another video or retry in a moment.';
+  }
   if (lowered.includes('sign in to confirm') || lowered.includes('not a bot')) {
     return 'YouTube temporarily blocked this request. Please try again shortly.';
   }
@@ -90,22 +93,27 @@ async function getYouTubeInfoViaInnertube(videoUrl) {
     throw new Error('Could not extract video ID');
   }
 
-  const innertube_url = 'https://www.youtube.com/youtubei/v1/player';
+  const innertube_url = 'https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
   const body = {
     videoId,
     context: {
       client: {
-        clientName: 'IOS',
-        clientVersion: '18.49.0',
+        clientName: 'WEB',
+        clientVersion: '2.20250305.01.00',
       },
     },
+    contentCheckOk: true,
+    racyCheckOk: true,
   };
 
   const response = await fetch(innertube_url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+      'Accept': 'application/json',
+      'Origin': 'https://www.youtube.com',
+      'Referer': 'https://www.youtube.com/',
+      'User-Agent': REQUEST_HEADERS['User-Agent'],
     },
     body: JSON.stringify(body),
   });
@@ -116,7 +124,8 @@ async function getYouTubeInfoViaInnertube(videoUrl) {
 
   const data = await response.json();
   if (data.playabilityStatus?.status !== 'OK') {
-    throw new Error('Video not available via Innertube');
+    const reason = data.playabilityStatus?.reason || data.playabilityStatus?.status || 'Video not available';
+    throw new Error(`Innertube unavailable: ${reason}`);
   }
 
   // Convert Innertube response to ytdl-core format
